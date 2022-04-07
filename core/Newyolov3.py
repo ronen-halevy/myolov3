@@ -149,26 +149,17 @@ def bbox_giou(boxes1, boxes2):
 
     return giou
 
-def get_loss_func(scale_id):
-    def compute_loss(pred, traindata):
-        label, bboxes = traindata
-        # conv_shape  = tf.shape(conv)
-        pred_shape  = tf.shape(pred)
 
-        batch_size = pred_shape[0]
-        output_size = pred_shape[1]
-
-        # batch_size  = conv_shape[0]
-        # output_size = conv_shape[1]
-
-        # batch_size  = conv_shape[0]
-        # output_size = conv_shape[1]
-        input_size  = STRIDES[scale_id] * output_size
+def get_loss_func(i):
+    def compute_loss(pred, train_data):
+        label, bboxes = train_data
+        conv_shape  = tf.shape(pred)
+        batch_size  = conv_shape[0]
+        output_size = conv_shape[1]
+        input_size  = STRIDES[i] * output_size
         # conv = tf.reshape(conv, (batch_size, output_size, output_size, 3, 5 + NUM_CLASS))
 
-        # conv_raw_conf = conv[:, :, :, :, 4:5]
-        # conv_raw_prob = conv[:, :, :, :, 5:]
-
+ 
         pred_conf = pred[:, :, :, :, 4:5]
         pred_prob = pred[:, :, :, :, 5:]
 
