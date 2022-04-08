@@ -42,6 +42,11 @@ for i, conv_tensor in enumerate(conv_tensors):
 
 model = tf.keras.Model(input_tensor, output_tensors)
 optimizer = tf.keras.optimizers.Adam()
+loss_functions = [get_loss_func(i) for i in range(NUM_OF_SCALES)]
+
+# loss_metric = tf.keras.metrics.Mean(name='train_loss')
+# accuracy_metric = tf.keras.metrics.SparseCategoricalAccuracy(name='train_accuracy')
+
 if os.path.exists(logdir): shutil.rmtree(logdir)
 writer = tf.summary.create_file_writer(logdir)
 
@@ -49,17 +54,13 @@ def train_step(image_data, target):
     with tf.GradientTape() as tape:
         pred_result = model(image_data, training=True)
         regularization_loss = tf.reduce_sum(model.losses)
-        # giou_loss=conf_loss=prob_loss=0
 
-##
-        loss_functions = [get_loss_func(i) for i in range(NUM_OF_SCALES)]
 
         pred_loss = []
         for output, train_data, loss_fn in zip(pred_result, target, loss_functions):
             pred_loss.append(loss_fn(output, train_data))
 
-        ##
-        # optimizing process
+
         loss_items = tf.reduce_sum(pred_loss, axis=(0))
 
         giou_loss = loss_items[0]
@@ -70,6 +71,10 @@ def train_step(image_data, target):
 
         gradients = tape.gradient(total_loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+
+        # loss_metric.update_state(total_loss)
+        # accuracy_metric.update_state(labels, predictions)
+
         tf.print("=> STEP %4d   lr: %.6f   giou_loss: %4.2f   conf_loss: %4.2f   "
                  "prob_loss: %4.2f   total_loss: %4.2f" % (global_steps, optimizer.lr.numpy(),
                                                            giou_loss, conf_loss,
