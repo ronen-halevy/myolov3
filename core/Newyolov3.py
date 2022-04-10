@@ -99,6 +99,15 @@ def decode(conv_output, i=0):
 
     return tf.concat([pred_xywh, pred_conf, pred_prob], axis=-1)
 
+
+def bbox_iou_broadcast(boxes1, boxes2):
+    boxes1 = tf.expand_dims(boxes1, -2)
+    new_shape = tf.broadcast_dynamic_shape(tf.shape(boxes1), tf.shape(boxes2))
+    boxes1 = tf.broadcast_to(boxes1, new_shape)
+    boxes2 = tf.broadcast_to(boxes2, new_shape)
+    iou = bbox_iou(boxes1, boxes2)
+    return iou
+
 def bbox_iou(boxes1, boxes2):
 
     boxes1_area = boxes1[..., 2] * boxes1[..., 3]
@@ -151,8 +160,7 @@ def bbox_giou(boxes1, boxes2):
 
 
 def get_loss_func(i):
-    def compute_loss(pred, train_data):
-        label, bboxes = train_data
+    def compute_loss(pred, label):
         conv_shape  = tf.shape(pred)
         batch_size  = conv_shape[0]
         output_size = conv_shape[1]
@@ -175,11 +183,15 @@ def get_loss_func(i):
 
         bbox_loss_scale = 2.0 - 1.0 * label_xywh[:, :, :, :, 2:3] * label_xywh[:, :, :, :, 3:4] / (input_size ** 2)
         giou_loss = respond_bbox * bbox_loss_scale * (1- giou)
+        obj_mask = tf.squeeze(tf.cast(label[:, :, :, :, 4:5], tf.bool), -1)
 
-        iou = bbox_iou(pred_xywh[:, :, :, :, np.newaxis, :], bboxes[:, np.newaxis, np.newaxis, np.newaxis, :, :])
-        max_iou = tf.expand_dims(tf.reduce_max(iou, axis=-1), axis=-1)
+        max_iou = tf.map_fn(
+            lambda x: tf.reduce_max(bbox_iou_broadcast(x[0], tf.boolean_mask(
+                x[1], tf.cast(x[2], tf.bool))), axis=-1),
+            (pred_xywh, label[:, :, :, :,  0:4], obj_mask),
+            tf.float32)
 
-        respond_bgd = (1.0 - respond_bbox) * tf.cast( max_iou < IOU_LOSS_THRESH, tf.float32 )
+        respond_bgd = (1.0 - respond_bbox) * tf.cast( tf.expand_dims(max_iou, axis=-1) < IOU_LOSS_THRESH, tf.float32 )
 
         conf_focal = tf.pow(respond_bbox - pred_conf, 2)
 
@@ -198,7 +210,6 @@ def get_loss_func(i):
         return giou_loss, conf_loss, prob_loss
 
     return compute_loss
-
 
 
 
